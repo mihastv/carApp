@@ -18,5 +18,13 @@ public class CustomCarRequest {
     public String getModel() { return model; }
     public EngineType getEngine() { return engine; }
     public TransmissionType getTransmission() { return transmission; }
-    // ... other getters and setters
+    public ExteriorColor getColor() { return color; }
+    public RimType getRims() { return rims; }
+
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
+    public void setModel(String model) { this.model = model; }
+    public void setEngine(EngineType engine) { this.engine = engine; }
+    public void setTransmission(TransmissionType transmission) { this.transmission = transmission; }
+    public void setColor(ExteriorColor color) { this.color = color; }
+    public void setRims(RimType rims) { this.rims = rims; }
 }
