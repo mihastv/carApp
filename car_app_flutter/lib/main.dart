@@ -9,6 +9,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'services/download_service.dart';
 
 const String apiBaseUrl = 'http://localhost:8083';
+const String lmStudioBaseUrl = 'http://localhost:1234';
+const String lmStudioModel = 'Lfm2.5 1.2B';
 
 const List<String> engineOptions = [
   'V4',
@@ -71,6 +73,8 @@ class _CarConfigPageState extends State<CarConfigPage> {
   bool _submitting = false;
   Map<String, dynamic>? _lastOrder;
   String? _statusMessage;
+  String? _promoText;
+  bool _promoGenerating = false;
 
   @override
   void dispose() {
@@ -202,6 +206,10 @@ class _CarConfigPageState extends State<CarConfigPage> {
     final exterior = _formatList(car['exteriorOptions']);
     final safety = _formatList(car['safetyFeatures']);
 
+    final promoSection = (_promoText == null || _promoText!.trim().isEmpty)
+      ? ''
+      : '\nPromo:\n${_promoText!.trim()}\n';
+
     return '''
 Order ID: ${order['orderId'] ?? '-'}
 Customer: ${order['customerName'] ?? '-'}
@@ -220,7 +228,74 @@ Base Price: ${car['basePrice'] ?? '-'}
 Interior Features: $features
 Exterior Options: $exterior
 Safety Features: $safety
+$promoSection
 ''';
+  }
+
+  Future<void> _generatePromo() async {
+    if (_lastOrder == null) {
+      return;
+    }
+
+    setState(() {
+      _promoGenerating = true;
+      _statusMessage = null;
+    });
+
+    final summary = _buildOrderSummary(_lastOrder!);
+    final payload = {
+      'model': lmStudioModel,
+      'messages': [
+        {
+          'role': 'system',
+          'content':
+              'You are a helpful marketing copywriter. Write a detailed promo for the car order summary. Aim for 150-200 words.'
+        },
+        {
+          'role': 'user',
+          'content': 'Create a promo for this order:\n$summary'
+        }
+      ],
+      'temperature': 0.7,
+      'max_tokens': 400
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse('$lmStudioBaseUrl/v1/chat/completions'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final choices = data['choices'] as List<dynamic>?;
+        final message = choices != null && choices.isNotEmpty
+            ? choices.first['message'] as Map<String, dynamic>?
+            : null;
+        final content = message?['content']?.toString().trim();
+
+        setState(() {
+          _promoText = (content == null || content.isEmpty)
+              ? 'Promo could not be generated.'
+              : content;
+          _statusMessage = 'Promo generated.';
+        });
+      } else {
+        setState(() {
+          _statusMessage =
+              'Promo failed (${response.statusCode}). Check LM Studio.';
+        });
+      }
+    } catch (error) {
+      setState(() {
+        _statusMessage = 'Promo error: $error';
+      });
+    } finally {
+      setState(() {
+        _promoGenerating = false;
+      });
+    }
   }
 
   String _formatList(dynamic list) {
@@ -387,6 +462,32 @@ Safety Features: $safety
                 _buildOrderSummary(_lastOrder!),
                 style: const TextStyle(fontFamily: 'Courier'),
               ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: _promoGenerating ? null : _generatePromo,
+                  icon: _promoGenerating
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome),
+                  label: const Text('Generate promo'),
+                ),
+                const SizedBox(width: 12),
+                if (_promoText != null && _promoText!.trim().isNotEmpty)
+                  Expanded(
+                    child: Text(
+                      _promoText!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
             Text(
